@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:jdbc="http://www.springframework.org/schema/jdbc"
+	xmlns:jee="http://www.springframework.org/schema/jee" xmlns:lang="http://www.springframework.org/schema/lang"
+	xmlns:p="http://www.springframework.org/schema/p" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:util="http://www.springframework.org/schema/util"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+		http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop.xsd
+		http://www.springframework.org/schema/jdbc http://www.springframework.org/schema/jdbc/spring-jdbc.xsd
+		http://www.springframework.org/schema/jee http://www.springframework.org/schema/jee/spring-jee.xsd
+		http://www.springframework.org/schema/lang http://www.springframework.org/schema/lang/spring-lang.xsd
+		http://www.springframework.org/schema/tx http://www.springframework.org/schema/tx/spring-tx.xsd
+		http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd">
+
+	<bean id="sessionFactory" class="org.springframework.orm.hibernate5.LocalSessionFactoryBean">
+		<property name="dataSource" ref="dataSource" />
+		<property name="hibernateProperties">
+			<props>
+				<prop key="hibernate.jdbc.batch_size">${hibernate.jdbc.batch_size:20}</prop>
+				<prop key="hibernate.cache.use_second_level_cache">${hibernate.cache.use_second_level_cache:true}</prop>
+				<prop key="hibernate.cache.provider_class">${hibernate.cache.provider_class:org.hibernate.cache.OSCacheProvider}
+				</prop>
+				<prop key="hibernate.cache.region.factory_class">org.hibernate.cache.ehcache.SingletonEhCacheRegionFactory
+				</prop>
+<!-- 				<prop key="hibernate.generate_statistics">${hibernate.generate_statistics:true}</prop> -->
+				<prop key="hibernate.cache.use_structured_entries">${hibernate.cache.use_structured_entries:true}</prop>
+				<prop key="hibernate.hbm2ddl.auto">none</prop>
+<!-- 				<prop key="hibernate.physical_naming_strategy"></prop> -->
+				<prop key="hibernate.show_sql">${hibernate.show_sql:false}</prop>
+				<prop key="hibernate.format_sql">true</prop>
+			</props>
+		</property>
+		<property name="annotatedClasses">
+			<ref bean="hibernateMappingClasses" />
+		</property>
+		<property name="packagesToScan">
+			<ref bean="hibernateMappingPackages" />
+		</property>
+		<property name="entityInterceptor">
+			<bean class="net.lc4ever.framework.dao.hibernate.AuditableObjectInterceptor" />
+		</property>
+	</bean>
+
+	<bean id="hibernateDAO" class="net.lc4ever.framework.dao.hibernate.GenericDAOHibernateStatics">
+		<property name="sessionFactory" ref="sessionFactory" />
+	</bean>
+
+	<bean id="genericCrudService" class="net.lc4ever.framework.service.impl.GenericCrudServiceImpl">
+		<property name="genericDao" ref="hibernateDAO" />
+	</bean>
+	<alias name="genericCrudService" alias="crudService" />
+
+</beans>

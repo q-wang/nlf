@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+	<bean id="stateMachineListener" class="net.lc4ever.framework.state.interceptor.StateMachineListenerAdapter">
+		<property name="currentUserProvider" ref="currentUserProvider" />
+		<property name="crudService" ref="genericCrudService"/>
+	</bean>
+	<bean id="stateMachineFactory" class="net.lc4ever.framework.state.facade.StateMachineFactory">
+		<property name="crudService" ref="genericCrudService" />
+		<property name="currentUserProvider" ref="currentUserProvider" />
+		<property name="listener" ref="stateMachineListener" />
+		<property name="sessionFactory" ref="sessionFactory" />
+	</bean>
+	<bean id="stateMachineMappingService" class="net.lc4ever.framework.state.facade.StateMachineMappingService">
+		<property name="crudService" ref="genericCrudService"/>
+	</bean>
+
+</beans>

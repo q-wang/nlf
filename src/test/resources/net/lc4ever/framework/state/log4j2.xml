@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration xmlns:xi="http://www.w3.org/2001/XInclude" status="WARN">
+
+	<Properties>
+		<Property name="file.location" value="/tmp/lnf" />
+	</Properties>
+
+	<Appenders>
+		<Console name="console">
+			<PatternLayout pattern="[%-5p] %d{HH:mm:ss} %-16t %32c{1} - %m%n" />
+		</Console>
+
+		<RollingFile name="main" fileName="${file.location}/test.log" filePattern="${file.location}/daily/test.%d{yyyy-MM-dd}.log.xz">
+			<PatternLayout pattern="%d{dd HH:mm:ss}(%T:%c): %m%n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy />
+			</Policies>
+		</RollingFile>
+		
+		<RollingFile name="httpClient" fileName="${file.location}/http-test.log"
+			filePattern="${file.location}/daily/gateway-batch.%d{yyyy-MM-dd}.log.xz">
+			<PatternLayout pattern="%d{dd HH:mm:ss} [%-4T]:%c: %m%n" />
+			<Policies>
+				<TimeBasedTriggeringPolicy />
+			</Policies>
+		</RollingFile>
+	</Appenders>
+
+	<loggers>
+		<logger level="INFO" name="net.lc4ever.framework.cglib" />
+		
+		<logger level="DEBUG" name="esb.http" additivity="false">
+			<appenderRef ref="httpClient" />
+		</logger>
+
+		<logger level="DEBUG" name="org.hibernate.SQL" />
+		
+		<logger level="DEBUG" name="org.apache.wicket.core.util.resource.locator.ResourceStreamLocator"/>
+		
+		<root level="INFO">
+			<appenderRef ref="main" />
+			<appenderRef ref="console" />
+		</root>
+	</loggers>
+
+</Configuration>

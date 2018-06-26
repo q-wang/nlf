@@ -1,0 +1,333 @@
+import org.gradle.plugins.ide.eclipse.model.SourceFolder
+import org.gradle.plugins.ide.eclipse.model.Library
+import org.gradle.api.logging.LoggingOutput
+import org.gradle.api.logging.StandardOutputListener
+
+apply plugin: 'java'
+apply plugin: 'eclipse-wtp'
+apply plugin: 'war'
+
+/*
+ plugins {
+ id 'net.nemerosa.versioning' version '2.6.1'
+ id 'com.github.ben-manes.versions' version '0.17.0'
+ }
+ */
+apply plugin: "com.github.ben-manes.versions"
+apply plugin: "net.nemerosa.versioning"
+
+buildscript {
+        repositories {
+                maven { url "http://maven.aliyun.com/nexus/content/groups/public" }
+                maven { url "http://localhost:8081/nexus/content/groups/public" }
+        }
+
+	dependencies {
+                classpath "org.apache.commons:commons-lang3:3.7"
+                classpath "net.nemerosa:versioning:2.6.1"
+                classpath "com.github.ben-manes:gradle-versions-plugin:0.17.0"
+        }
+}
+
+defaultTasks = ['cleanEclipse', 'eclipse']
+
+dependencyUpdates.revision="release"
+dependencyUpdates.outputFormatter="xml"
+dependencyUpdates.resolutionStrategy = {
+        componentSelection { rules ->
+                rules.all { ComponentSelection selection ->
+                        boolean rejected = ['alpha', 'beta', 'rc', 'cr', 'm', '_ALPHA', 'incubating'].any { qualifier ->
+                                selection.candidate.version ==~ /(?i).*[.-]${qualifier}[.\d-]*/
+                        }
+                        if (rejected) {
+                                selection.reject('Release candidate')
+                        }
+                        def candidate = selection.candidate
+			if (candidate.group == 'org.apache.tomcat.embed' && !candidate.version.startsWith('7.')) {
+                                selection.reject('tomcat 8+ reject')
+                        } else if (candidate.module == 'hibernate-core' && !candidate.version.startsWith('5.1.')) {
+                                selection.reject('hibernate 5.2+ reject')
+                        } else if (candidate.module == 'hibernate-jpamodelgen' && !candidate.version.startsWith('5.1.')) {
+                                selection.reject('hibernate 5.2+ reject')
+                        } else if (candidate.module == 'hibernate-ehcache' && !candidate.version.startsWith('5.1.')) {
+                                selection.reject('hibernate 5.2+ reject')
+                        } else if (candidate.group == 'org.apache.wicket' && !candidate.version.startsWith('6.')) {
+                                selection.reject('wicket 7+ reject')
+                        } else if (candidate.module == 'jsp-api' || candidate.module == 'servlet-api' || candidate.module == 'javax.servlet-api') {
+				selection.reject('jsp-api, servlet-api version was fixed!')
+                        } else if (candidate.module == 'freemarker' && !(candidate.version ==~ /^[.\d]*$/ )) {
+                                selection.reject('freemarker reject non official version')
+                        } else if (candidate.group == 'org.ow2.asm' && !(candidate.version ==~ /^[.\d]*$/ )) {
+                                selection.reject('asm reject non /^[.\\d]*$/ version')
+                        } else if (candidate.group == 'org.springframework' && !candidate.version.startWith('4.')) {
+                                selection.reject('spring 5+ reject')
+                        } else if (candidate.group == 'org.slf4j' && !(candidate.version ==~ /^[.\d]*$/ )) {
+                                selection.reject('slf4j reject non /^[.\\d]*$/ version')
+                        } else if (candidate.group == 'org.apache.zookeeper' && !(candidate.version ==~ /^[.\d]*$/ )) {
+                                selection.reject('zookeeper reject non /^[.\\d]*$/ version')
+                        } else if (candidate.group == 'org.springframework.security' && !candidate.version.startsWith('4.')) {
+                                selection.reject('spring security 5+ reject')
+                        }
+                }
+        }
+}
+
+subprojects {
+        apply plugin: 'java'
+        apply plugin: 'eclipse-wtp'
+        apply plugin: 'war'
+        //      apply plugin: 'com.diffplug.gradle.spotless'
+
+        sourceCompatibility = 1.7
+        targetCompatibility = 1.7
+        webAppDirName = "WebContent"
+
+        eclipse.project {
+                natures 'org.eclipse.wst.common.project.facet.core.nature'
+                natures 'org.eclipse.wst.common.modulecore.ModuleCoreNature'
+                natures 'org.eclipse.jem.workbench.JavaEMFNature'
+                buildCommand 'org.eclipse.wst.common.project.facet.core.builder'
+                buildCommand 'org.eclipse.wst.validation.validationbuilder'
+        }
+        eclipse.classpath {
+                defaultOutputDir = file("build-eclipse/main")
+                downloadSources = true
+                file.whenMerged { classpath ->
+                        def outputs = [:]
+                        sourceSets.each { ss ->
+                                def classesOutput = project.relativePath(ss.output.classesDir).replaceAll("\\\\","/")
+                                def resourcesOutput = project.relativePath(ss.output.resourcesDir).replaceAll("\\\\","/")
+                                ss.java.srcDirTrees.each { outputs[project.relativePath(it.dir.absolutePath).replaceAll("\\\\","/")] = classesOutput }
+                                ss.resources.srcDirTrees.each { outputs[project.relativePath(it.dir.absolutePath).replaceAll("\\\\","/")] = resourcesOutput }
+                        }
+                        classpath.entries.each {
+                                if (it instanceof SourceFolder && outputs.containsKey(it.path)) { it.output = outputs[it.path] }
+                        }
+			classpath.entries.sort { a, b ->
+                                return a.kind == 'con' ? 1 : b.kind == 'con' ? -1 :
+                                                a.kind == 'lib' && b.kind == 'lib' ? a.path.split('/')[-1] <=> b.path.split('/')[-1]:
+                                                a.kind == 'lib' ? 1 : b.kind == 'lib' ? -1 : a.path<=>b.path
+                        }
+                }
+        }
+
+        [compileJava, compileTestJava]*.options.collect { options ->
+                options.encoding = 'UTF-8'
+        }
+        /*      
+         spotless {
+         java {
+         importOrder(['java', 'javax', 'org', 'com'])
+         lineEndings 'WINDOWS'
+         encoding 'UTF-8'
+         }
+         }
+         // */
+        dependencies {
+
+                modules {
+                        module("com.google.collections:google-collections") { replacedBy("com.google.guava:guava") }
+                        module("log4j:log4j") { replacedBy("org.slf4j:log4j-over-slf4j") }
+                        module("org.slf4j:slf4j-log4j12") { replacedBy("org.slf4j:log4j-over-slf4j") }
+                        module("commons-logging:commons-logging") { replacedBy("org.slf4j:jcl-over-slf4j") }
+                        module("jstl:jstl") { replacedBy("javax.servlet.jsp.jstl:jstl-api") }
+                        module("asm:asm") {replacedBy("org.ow2.asm:asm-all")}
+                }
+		providedCompile group: 'javax.servlet.jsp', name: 'jsp-api', version: "$jspApiVersion"
+                providedCompile group: 'javax.servlet', name: 'servlet-api', version: "$servletApiVersion"
+
+                compile group: 'joda-time', name: 'joda-time', version: "$jodaTimeVersion"
+                compile group: 'org.slf4j', name: 'slf4j-api', version: "$slf4jVersion"
+                compile group: 'org.slf4j', name: 'log4j-over-slf4j', version: "$slf4jVersion"
+                compile group: 'org.slf4j', name: 'jcl-over-slf4j', version: "$slf4jVersion"
+                compile group: 'org.apache.logging.log4j', name: 'log4j-api', version: "$log4j2Version"
+                compile group: 'org.apache.logging.log4j', name: 'log4j-core', version: "$log4j2Version"
+                compile group: 'org.apache.logging.log4j', name: 'log4j-slf4j-impl', version: "$log4j2Version"
+                compile group: 'org.apache.logging.log4j', name: 'log4j-web', version: "$log4j2Version"
+
+                compile group: 'org.apache.commons', name: 'commons-compress', version: "$commonsCompressVersion"
+                compile group: 'org.tukaani', name: 'xz', version: '1.8'
+
+                compile group: 'com.alibaba', name: 'dubbo', version: "$dubboVersion"
+
+                testCompile group: 'com.sun.net.httpserver', name: 'http', version: "20070405"
+                testCompile ([group: 'org.springframework', name: 'spring-test', version: "$springVersion"]) { exclude module: 'spring-core' }
+                testCompile group: 'junit', name: 'junit', version: "$junitVersion"
+                testCompile group: 'com.h2database', name: 'h2', version: "$h2Version"
+                testCompile group: 'org.mockito', name: 'mockito-all', version: '1.10.19'
+                testCompile 'javax.servlet:javax.servlet-api:3.1.0'
+                testCompile group: 'org.apache.commons', name: 'commons-dbcp2', version: "$commonsDbcp2Version"
+
+        }
+
+       repositories {
+                maven { url "http://maven.aliyun.com/nexus/content/groups/public" }
+                maven { url "http://localhost:8081/nexus/content/groups/public" }
+        }
+
+        task cleanLegacyBin {
+                delete 'bin'
+                delete 'build'
+                delete 'build-eclipse'
+                delete 'WebContent/WEB-INF/classes'
+        }
+
+        task writeDep {
+                doLast {
+                        delete 'gradle-dependencies.txt'
+                        def depFile = file('gradle-dependencies.txt');
+                        def listener = new StandardOutputListener() {
+                                                void onOutput(CharSequence output) {
+                                                        depFile << output
+                                                }
+                                        }
+                        logging.addStandardOutputListener listener
+                        tasks.dependencies.execute()
+                        logging.removeStandardOutputListener listener
+                }
+        }
+
+        task copyJars {
+                dependsOn jar
+                doLast {
+                        def jars = [
+                                provided: [
+                                        from: configurations.providedCompile,
+                                ],
+                                compile: [
+                                        from: configurations.compile - configurations.providedCompile,
+                                        exclude: ['**/common-apis.jar', '**/common-framework.jar', "**/qned-api.jar", '**/gateway-api.jar', '**/loan-api.jar', '**/CFCAJCE3.0.0.1.jar', '**/ojdbc7.jar', '**/com.ibm.mq.allclient.jar']],
+                                runtime: [
+                                        from: configurations.runtime - configurations.compile,
+                                ],
+                                test: [
+                                        from: configurations.testCompile - configurations.compile,
+                                ]
+                        ]
+                        for (entry in jars) {
+                                entry.value.files = []
+                                (entry.value.exclude) || (entry.value.exclude = [])
+                                copy {
+                                        into new File(eqd.lib,entry.key)
+                                        from entry.value.from
+                                        exclude entry.value.exclude
+                                        eachFile {
+                                                entry.value.files.add it.sourceName
+                                        }
+                                }
+                        }
+                        file("../lib/${project.name}.ant.xml").withPrintWriter {
+                                def xml = new groovy.xml.MarkupBuilder(it)
+                                for (entry in jars) {
+                                        xml.patternset(id: "ps." + project.name + "." + entry.key) {
+                                                if (entry.value.files.empty) {
+                                                        exclude(name: "*")
+                                                } else {
+                                                        entry.value.files.each { jar->
+                                                                if (!(jar.startsWith('xml-apis')||jar.startsWith('stax-api'))) {
+                                                                        include(name: jar)
+                                                                }
+                                                        }
+                                                }
+                                        }
+                                        entry.value.files.clear()
+                                }
+                                it.println()
+                        }
+                }
+        }
+}
+
+repositories {
+	maven { url "http://maven.aliyun.com/nexus/content/groups/public" }
+	maven { url "http://localhost:8081/nexus/content/groups/public" }
+}
+
+dependencies {
+	compile group: 'org.springframework', name: 'spring-beans', version: "$springVersion"
+	compile group: 'org.springframework', name: 'spring-context', version: "$springVersion"
+	compile group: 'org.springframework', name: 'spring-context-support', version: "$springVersion"
+	compile group: 'org.springframework', name: 'spring-web', version: "$springVersion"
+	compile group: 'org.springframework', name: 'spring-orm', version: "$springVersion"
+	//compile group: 'org.springframework.amqp', name: 'spring-rabbit', version: "1.7.1.RELEASE";
+	
+	compile group: 'org.apache.commons', name: 'commons-lang3', version: "$commonsLang3Version"
+	compile group: 'org.ow2.asm', name: 'asm-all', version: "$asmVersion"
+	compile group: 'com.caucho', name: 'hessian', version: "$hessianVersion"
+	
+	compile group: 'commons-httpclient', name: 'commons-httpclient', version: "$commonsHttpClientVersion"
+	compile group: 'commons-net', name: 'commons-net', version: "$commonsNetVersion"
+	compile group: 'org.apache.httpcomponents', name: 'httpclient', version: "$httpclientVersion"
+	compile group: 'org.apache.httpcomponents', name: 'httpmime', version: "$httpclientVersion"
+	
+	compile group: 'org.hibernate', name: 'hibernate-core', version: "$hibernateVersion"
+	compile group: 'org.hibernate', name: 'hibernate-jpamodelgen', version: "$hibernateVersion"
+	compile group: 'org.hibernate', name: 'hibernate-ehcache', version: "$hibernateVersion"
+	compile group: 'org.springframework.security', name: 'spring-security-core', version: "$springSecurityVersion"
+	
+	compile group: 'com.google.code.gson', name: 'gson', version: "$gsonVersion"
+	compile group: 'org.quartz-scheduler', name: 'quartz', version: '2.3.0'
+	
+	compile "com.fasterxml.jackson.core:jackson-core:$jackson2Version"
+	compile "com.fasterxml.jackson.core:jackson-databind:$jackson2Version"
+	compile "com.fasterxml.jackson.core:jackson-annotations:$jackson2Version"
+	
+	compile group: 'org.bouncycastle', name: 'bcprov-jdk15on', version: "$bouncyCastleVersion"
+	compile group: 'org.bouncycastle', name: 'bcpkix-jdk15on', version: "$bouncyCastleVersion"
+	compile group: 'org.bouncycastle', name: 'bcmail-jdk15on', version: "$bouncyCastleVersion"
+	compile group: 'org.bouncycastle', name: 'bcpg-jdk15on', version: "$bouncyCastleVersion"
+	compile group: 'org.bouncycastle', name: 'bcprov-ext-jdk15on', version: "$bouncyCastleVersion"
+	
+	compile group: 'org.aspectj', name: 'aspectjweaver', version: "$aspectjVersion"
+	
+	runtime files("lib/ojdbc7.jar")
+}
+
+eclipse {
+	project {
+		natures 'org.eclipse.wst.common.project.facet.core.nature'
+		natures 'org.eclipse.wst.common.modulecore.ModuleCoreNature'
+		natures 'org.eclipse.jem.workbench.JavaEMFNature'
+		buildCommand 'org.eclipse.wst.common.project.facet.core.builder'
+		buildCommand 'org.eclipse.wst.validation.validationbuilder'
+	}
+	classpath.file.withXml {
+		for (entry in node['classpathentry'].iterator()) {
+			if (entry.'@kind' == 'lib') {
+				def String path = entry.'@path'
+				if (configurations.providedCompile.find {it.path == path}) {
+					//							logger.info 'ProvidedCompile Lib Found:' + file(entry.'@path').name
+					//							entry.children().clear()
+				} else 	if ((configurations.testCompile - configurations.compile).find {it.path == path}) {
+					//							logger.info 'TestCompile Lib Found:' + file(entry.'@path').name
+					//							entry.children().clear()
+				} else {
+					entry.children().clear()
+					entry.@exported = "true"
+					entry.appendNode('attributes').appendNode('attribute', [
+						'name': 'org.eclipse.jst.component.dependency', 'value': '../'
+					])
+				}
+			} else if (entry.'@kind' == 'con') {
+				// TODO match sourceCompatibility & targetCompatibility
+				entry.'@path' = entry.'@path'.replaceFirst('^org\\.eclipse\\.jdt\\.launching\\.JRE_CONTAINER$', "org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.7");
+			}
+		}
+	}
+	wtp.facet.file.withXml {
+		def Node node = it.asNode();
+		node.children().clear();
+		node.appendNode('fixed',['facet':'jst.java'])
+		node.appendNode('fixed',['facet':'jst.utility'])
+		node.appendNode('installed',['facet':'jst.java','version':'1.7'])
+		node.appendNode('installed',['facet':'jst.utility','version':'1.0'])
+	}
+	wtp.component.file.withXml {
+		for (wb in it.asNode().'wb-module') {
+			for (res in wb.'wb-resource') {
+				res.'@deploy-path' = '/';
+			}
+		}
+	}
+}
+
